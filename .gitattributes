@@ -1,0 +1,3 @@
+# Preserve the supplied source and upstream licenses byte-for-byte.
+FFT_Unified_Guide.md -text -whitespace
+public/fonts/*OFL.txt -text -whitespace
