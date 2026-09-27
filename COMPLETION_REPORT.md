@@ -62,7 +62,9 @@ These are **new for this build**, not claims about the original game's content:
 
 ## Verification
 
-Final verification on 26 September 2026: **30/30 engine tests passed**, the source/content verifier passed, the Vite production build passed, and **5/5 production browser tests passed with zero skipped tests**. Both WebGPU and WebGL2 were exercised. The browser suite also checks that texture allocation remains bounded across repeated quality changes.
+The 27 September follow-up sweep protects existing progress from title-screen saves, makes failed loads leave the current campaign intact, and reports storage failures. It also fixes post-battle ability selection, stacking movement bonuses, fallen-unit occupancy, invalid action previews, interrupted casts, character-body selection, keyboard focus, and stale facing controls. Audio loading failures now allow play to continue with a visible notice.
+
+Final verification on 27 September 2026: **37/37 engine tests passed**, the source/content verifier passed, the Vite production build passed, and **10/10 production browser tests passed with zero skipped tests**. Both WebGPU and WebGL2 were exercised. The browser suite also checks that texture allocation remains bounded across repeated quality changes.
 
 Rendered evidence: [title](docs/screenshots/title.png), [battle](docs/screenshots/battle.png), [mobile battle](docs/screenshots/mobile.png), and [ending loaded from legally simulated progress](docs/screenshots/ending.png). These captures use software rendering and are not performance benchmarks.
 

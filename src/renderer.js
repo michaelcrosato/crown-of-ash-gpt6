@@ -234,6 +234,11 @@ export class BattlefieldRenderer {
 			}
 			touches.delete(event.pointerId);
 			this.pinchDistance = null;
+			this.pointerStart = null;
+		});
+		this.canvas.addEventListener("pointerleave", () => {
+			this.hover.visible = false;
+			this.onHover?.(null, null);
 		});
 		this.canvas.addEventListener("pointercancel", (event) => {
 			touches.delete(event.pointerId);
@@ -784,6 +789,7 @@ export class BattlefieldRenderer {
 			}
 			if (!visual) {
 				const group = this.makeUnit(unit);
+				group.userData.unitId = unit.id;
 				this.unitGroup.add(group);
 				const label = document.createElement("div");
 				label.className = "field-unit-label";
@@ -1330,8 +1336,22 @@ export class BattlefieldRenderer {
 			(-(event.clientY - rect.top) / rect.height) * 2 + 1,
 		);
 		this.raycaster.setFromCamera(this.pointer, this.camera);
-		return this.raycaster.intersectObjects([...this.tiles.values()], false)[0]
-			?.object.userData.tile;
+		const objects = [
+			...this.tiles.values(),
+			...[...this.units.values()]
+				.filter((visual) => visual.group.visible && !visual.unit.removed)
+				.map((visual) => visual.group),
+		];
+		const hit = this.raycaster.intersectObjects(objects, true)[0];
+		if (!hit) return null;
+		let object = hit.object;
+		while (object && !object.userData.unitId && !object.userData.tile)
+			object = object.parent;
+		if (object?.userData.unitId) {
+			const unit = this.units.get(object.userData.unitId)?.unit;
+			return this.tiles.get(`${unit.x},${unit.z}`)?.userData.tile;
+		}
+		return object?.userData.tile;
 	}
 
 	pointerMove(event) {
@@ -1345,7 +1365,7 @@ export class BattlefieldRenderer {
 				tile.z - this.offsetZ,
 			);
 			this.onHover?.(tile.x, tile.z);
-		}
+		} else this.onHover?.(null, null);
 	}
 
 	effect(event) {

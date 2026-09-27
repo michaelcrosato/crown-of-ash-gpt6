@@ -914,7 +914,7 @@ export function setupUI(game, renderer, audio) {
 			target?.name || prediction?.name || preview.targetName || action;
 		const warning =
 			preview.valid === false
-				? "This tile is outside the action’s range."
+				? preview.reason || "This tile is outside the action’s range."
 				: preview.friendlyFire
 					? "Warning: this action also affects your allies."
 					: !prediction
@@ -993,7 +993,7 @@ export function setupUI(game, renderer, audio) {
 			classes = "";
 		const close = `<button class="modal-close" data-action="close-modal" aria-label="Close dialog">${icon("close")}</button>`;
 		if (modal === "options")
-			body = `${close}<div class="modal-heading"><div class="eyebrow">Make yourself at home</div><h2>Options</h2><p>Shape the experience to suit your journey.</p></div><div class="settings-row"><div class="settings-copy"><strong>Master volume</strong><span>Music and battlefield sound</span></div><input id="volume" type="range" min="0" max="1" step="0.05" value="${volume}" aria-label="Master volume"></div><div class="settings-row"><div class="settings-copy"><strong>Mute audio</strong><span>Quiet on the battlefield</span></div><button class="toggle ${muted ? "on" : ""}" data-action="mute" role="switch" aria-checked="${muted}" aria-label="Mute audio"></button></div><div class="settings-row"><div class="settings-copy"><strong>Battle difficulty</strong><span>Story eases combat; Tactical rewards preparation</span></div><select id="difficulty" aria-label="Battle difficulty" ${getState().screen === "battle" ? "disabled" : ""}><option value="tactical" ${(getState().difficulty || difficulty) === "tactical" ? "selected" : ""}>Tactical</option><option value="story" ${(getState().difficulty || difficulty) === "story" ? "selected" : ""}>Story</option></select></div><div class="settings-row"><div class="settings-copy"><strong>Rendering quality</strong><span>Auto adapts to measured frame time</span></div><select id="quality" aria-label="Rendering quality">${["Auto", "High", "Balanced"].map((preset) => `<option ${quality.toLowerCase() === preset.toLowerCase() ? "selected" : ""}>${preset}</option>`).join("")}</select></div><div class="settings-row"><div class="settings-copy"><strong>Performance display</strong><span>Graphics backend, preset, and frame time</span></div><button class="toggle ${diagnostics ? "on" : ""}" data-action="diagnostics" role="switch" aria-checked="${diagnostics}" aria-label="Show performance diagnostics"></button></div><div class="settings-row"><div class="settings-copy"><strong>Fullscreen</strong><span>Let Ivalice fill the screen</span></div><button class="icon-button" data-action="fullscreen" aria-label="Toggle fullscreen">${icon("fullscreen")}</button></div><div class="settings-row"><div class="settings-copy"><strong>Save your chronicle</strong><span>Your progress also saves automatically</span></div>${button("Save now", "save", { class: "small secondary", icon: "save" })}</div><div class="settings-row"><div class="settings-copy"><strong>Restore camp checkpoint</strong><span>Recover the company and supplies from before an encounter</span></div>${button("Restore", "restore-checkpoint", { class: "small secondary", disabled: !game.hasCheckpoint?.() })}</div><div class="settings-row"><div class="settings-copy"><strong>How to play</strong><span>Controls and tactical fundamentals</span></div><button class="icon-button" data-action="controls" aria-label="Open controls reference">${icon("book")}</button></div><p class="settings-note">High: richer shadows and post effects. Balanced: lower rendering cost and fewer physical fragments. Your progress is stored locally in this browser.</p><div class="button-row">${button("Resume", "close-modal", { icon: "arrow" })}</div>`;
+			body = `${close}<div class="modal-heading"><div class="eyebrow">Make yourself at home</div><h2>Options</h2><p>Shape the experience to suit your journey.</p></div><div class="settings-row"><div class="settings-copy"><strong>Master volume</strong><span>Music and battlefield sound</span></div><input id="volume" type="range" min="0" max="1" step="0.05" value="${volume}" aria-label="Master volume"></div><div class="settings-row"><div class="settings-copy"><strong>Mute audio</strong><span>Quiet on the battlefield</span></div><button class="toggle ${muted ? "on" : ""}" data-action="mute" role="switch" aria-checked="${muted}" aria-label="Mute audio"></button></div><div class="settings-row"><div class="settings-copy"><strong>Battle difficulty</strong><span>Story eases combat; Tactical rewards preparation</span></div><select id="difficulty" aria-label="Battle difficulty" ${getState().screen === "battle" ? "disabled" : ""}><option value="tactical" ${(getState().difficulty || difficulty) === "tactical" ? "selected" : ""}>Tactical</option><option value="story" ${(getState().difficulty || difficulty) === "story" ? "selected" : ""}>Story</option></select></div><div class="settings-row"><div class="settings-copy"><strong>Rendering quality</strong><span>Auto adapts to measured frame time</span></div><select id="quality" aria-label="Rendering quality">${["Auto", "High", "Balanced"].map((preset) => `<option ${quality.toLowerCase() === preset.toLowerCase() ? "selected" : ""}>${preset}</option>`).join("")}</select></div><div class="settings-row"><div class="settings-copy"><strong>Performance display</strong><span>Graphics backend, preset, and frame time</span></div><button class="toggle ${diagnostics ? "on" : ""}" data-action="diagnostics" role="switch" aria-checked="${diagnostics}" aria-label="Show performance diagnostics"></button></div><div class="settings-row"><div class="settings-copy"><strong>Fullscreen</strong><span>Let Ivalice fill the screen</span></div><button class="icon-button" data-action="fullscreen" aria-label="Toggle fullscreen">${icon("fullscreen")}</button></div><div class="settings-row"><div class="settings-copy"><strong>Save your chronicle</strong><span>Your progress also saves automatically</span></div>${button("Save now", "save", { class: "small secondary", icon: "save", disabled: !party().length })}</div><div class="settings-row"><div class="settings-copy"><strong>Restore camp checkpoint</strong><span>Recover the company and supplies from before an encounter</span></div>${button("Restore", "restore-checkpoint", { class: "small secondary", disabled: !game.hasCheckpoint?.() })}</div><div class="settings-row"><div class="settings-copy"><strong>How to play</strong><span>Controls and tactical fundamentals</span></div><button class="icon-button" data-action="controls" aria-label="Open controls reference">${icon("book")}</button></div><p class="settings-note">High: richer shadows and post effects. Balanced: lower rendering cost and fewer physical fragments. Your progress is stored locally in this browser.</p><div class="button-row">${button("Resume", "close-modal", { icon: "arrow" })}</div>`;
 		else if (modal === "controls") {
 			classes = "large";
 			body = `${close}<div class="modal-heading"><div class="eyebrow">A tactician’s field guide</div><h2>Every choice leaves a mark.</h2><p>Move with purpose. Act with conviction. Keep your company together.</p></div><div class="controls-grid">${[
@@ -1178,11 +1178,15 @@ export function setupUI(game, renderer, audio) {
 		}
 		if (scrollTop) root.querySelector("[data-scroll]")?.scrollTo(0, scrollTop);
 		update(performance.now(), true);
-		if (state.battle) {
+		if (state.screen === "battle" && state.battle) {
 			const active = activeUnit();
 			if (active && !state.battle.selection)
 				keyboardTile = { x: active.x, z: active.z };
-			if (state.battle.needsFacing && actionMenu !== "facing") {
+			if (
+				state.battle.phase === "player" &&
+				state.battle.needsFacing &&
+				actionMenu !== "facing"
+			) {
 				actionMenu = "facing";
 				queueMicrotask(render);
 			}
@@ -1191,7 +1195,14 @@ export function setupUI(game, renderer, audio) {
 
 	function selectTile(x, z) {
 		const battle = getState().battle;
-		if (!battle || panel || modal) return false;
+		if (
+			getState().screen !== "battle" ||
+			!battle ||
+			panel ||
+			modal ||
+			actionMenu
+		)
+			return false;
 		if (battle.action === "move" || battle.phase !== "player") {
 			pendingTarget = null;
 			return invoke("selectTile", x, z);
@@ -1201,7 +1212,10 @@ export function setupUI(game, renderer, audio) {
 			pendingTarget = null;
 			hoverSelection = { x, z };
 			render();
-			notify("This tile is outside the action’s range.", true);
+			notify(
+				preview?.reason || "This tile is outside the action’s range.",
+				true,
+			);
 			return false;
 		}
 		if (pendingTarget?.x === x && pendingTarget?.z === z) {
@@ -1276,6 +1290,15 @@ export function setupUI(game, renderer, audio) {
 		root.querySelector("[data-scroll]")?.scrollTo(0, 0);
 	}
 	function handleBattleAction(id) {
+		const battle = getState().battle;
+		const unit = activeUnit();
+		if (getState().screen !== "battle" || battle?.phase !== "player" || !unit)
+			return;
+		if (
+			(id === "move" && unit.moved) ||
+			(["attack", "abilities", "items"].includes(id) && unit.acted)
+		)
+			return;
 		pendingTarget = null;
 		hoverSelection = null;
 		if (id === "abilities" || id === "items") {
@@ -1323,7 +1346,11 @@ export function setupUI(game, renderer, audio) {
 			case "continue":
 				panel = null;
 				modal = null;
-				invoke("continueGame");
+				if (invoke("continueGame") === false)
+					notify(
+						"Your saved chronicle could not be loaded. Try restoring the camp checkpoint in Options.",
+						true,
+					);
 				render();
 				break;
 			case "campaign":
@@ -1417,8 +1444,12 @@ export function setupUI(game, renderer, audio) {
 				break;
 			}
 			case "save":
-				invoke("save");
-				notify("Your chronicle has been saved.");
+				if (invoke("save")) notify("Your chronicle has been saved.");
+				else
+					notify(
+						"Your chronicle could not be saved. Check that browser storage is available.",
+						true,
+					);
 				break;
 			case "zoom-in":
 				renderer?.zoomBy?.(-1);
@@ -1662,6 +1693,11 @@ export function setupUI(game, renderer, audio) {
 				render();
 				break;
 			case "face":
+				if (
+					getState().screen !== "battle" ||
+					getState().battle?.phase !== "player"
+				)
+					break;
 				actionMenu = null;
 				pendingTarget = null;
 				hoverSelection = null;
@@ -1831,7 +1867,6 @@ export function setupUI(game, renderer, audio) {
 		}
 	});
 	document.addEventListener("keydown", (event) => {
-		if (["INPUT", "SELECT", "TEXTAREA"].includes(event.target.tagName)) return;
 		if (event.key === "Escape") {
 			event.preventDefault();
 			if (modal) modal = null;
@@ -1847,7 +1882,7 @@ export function setupUI(game, renderer, audio) {
 			if (event.key === "Tab") {
 				const focusable = [
 					...root.querySelectorAll(
-						".modal button:not(:disabled),.modal input,.modal select",
+						".modal button:not(:disabled),.modal input:not(:disabled),.modal select:not(:disabled)",
 					),
 				];
 				const first = focusable[0],
@@ -1862,6 +1897,19 @@ export function setupUI(game, renderer, audio) {
 			}
 			return;
 		}
+		if (
+			["INPUT", "SELECT", "TEXTAREA"].includes(event.target.tagName) ||
+			event.target.isContentEditable
+		)
+			return;
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
+		// Preserve native button activation. Arrow keys explicitly enter tile
+		// navigation, giving Enter an unambiguous battlefield target.
+		if (
+			(event.key === "Enter" || event.key === " ") &&
+			event.target.closest("button, a, [role=button]")
+		)
+			return;
 		if (panel) return;
 		const key = event.key.toLowerCase();
 		if (key === "q") {
@@ -1919,6 +1967,8 @@ export function setupUI(game, renderer, audio) {
 				),
 			);
 			renderer?.setCursor?.(keyboardTile);
+			renderer?.canvas?.focus({ preventScroll: true });
+			previewTile(keyboardTile.x, keyboardTile.z);
 			notify(
 				`Tile ${keyboardTile.x + 1}, ${keyboardTile.z + 1}. Enter to select.`,
 			);
@@ -1930,6 +1980,7 @@ export function setupUI(game, renderer, audio) {
 	});
 	game.subscribe?.((_state, event) => {
 		if (["turn", "turn-start", "wait", "battle-start"].includes(event?.type)) {
+			actionMenu = null;
 			const current = activeUnit();
 			if (current) keyboardTile = { x: current.x, z: current.z };
 			pendingTarget = null;

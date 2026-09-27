@@ -331,7 +331,14 @@ function findItem(fragment) {
 }
 
 export class Game {
-	constructor({ seed = 7351, storage = globalThis.localStorage } = {}) {
+	constructor({ seed = 7351, storage } = {}) {
+		if (storage === undefined) {
+			try {
+				storage = globalThis.localStorage;
+			} catch {
+				storage = null;
+			}
+		}
 		this.storage = storage;
 		this.listeners = new Set();
 		this.seed = seed;
@@ -630,15 +637,9 @@ export class Game {
 			const ability = abilityData(id);
 			if (ability?.kind !== "passive") continue;
 			if (/move\s*\+\s*(\d)/i.test(ability.name))
-				unit.move = Math.max(
-					unit.move,
-					stats.move + Number(ability.name.match(/\d/)[0]),
-				);
+				unit.move += Number(ability.name.match(/\d/)[0]);
 			if (/jump\s*\+\s*(\d)/i.test(ability.name))
-				unit.jump = Math.max(
-					unit.jump,
-					stats.jump + Number(ability.name.match(/\d/)[0]),
-				);
+				unit.jump += Number(ability.name.match(/\d/)[0]);
 			if (/defense up/i.test(ability.name)) unit.defense += 0.25;
 			if (/magic attack\s*up/i.test(ability.name))
 				unit.ma = Math.round(unit.ma * 1.33);
@@ -1345,7 +1346,8 @@ export class Game {
 	}
 	getUnit(id) {
 		return (
-			this.state.battle?.units.find((unit) => unit.id === id) ||
+			(this.state.screen === "battle" &&
+				this.state.battle?.units.find((unit) => unit.id === id)) ||
 			this.state.party.find((unit) => unit.id === id)
 		);
 	}
@@ -1447,6 +1449,8 @@ export class Game {
 				if (
 					!caster ||
 					caster.hp <= 0 ||
+					(cast.repeat ? caster.performing : caster.casting) !==
+						cast.abilityId ||
 					(caster.statuses.silence && castAbility?.mp > 0) ||
 					caster.statuses.petrify
 				) {
@@ -1513,7 +1517,9 @@ export class Game {
 					Math.max(0, 100 - b.ct) / this.effectiveSpeed(b),
 			)
 			.map((unit) => unit.id);
-		battle.needsFacing = !!(this.activeUnit?.moved && this.activeUnit?.acted);
+		battle.needsFacing =
+			battle.phase === "player" &&
+			!!(this.activeUnit?.moved && this.activeUnit?.acted);
 	}
 
 	getReachable(unit = this.activeUnit) {
@@ -1548,8 +1554,8 @@ export class Game {
 				.filter(
 					(tile) =>
 						!tile.blocked &&
-						(!this.unitAt(tile.x, tile.z) ||
-							this.unitAt(tile.x, tile.z)?.id === unit.id),
+						(!this.unitAt(tile.x, tile.z, true) ||
+							this.unitAt(tile.x, tile.z, true)?.id === unit.id),
 				)
 				.map((tile) => {
 					const cost = distance(unit, tile);
@@ -1621,7 +1627,7 @@ export class Game {
 		return [...best.values()].filter(
 			(tile) =>
 				!this.getTile(tile.x, tile.z).blocked &&
-				(!this.unitAt(tile.x, tile.z) ||
+				(!this.unitAt(tile.x, tile.z, true) ||
 					(tile.x === unit.x && tile.z === unit.z)),
 		);
 	}
@@ -1714,7 +1720,12 @@ export class Game {
 	}
 	setAction(id) {
 		const unit = this.activeUnit;
-		if (!unit || this.state.battle.phase !== "player") return false;
+		if (
+			!unit ||
+			this.state.screen !== "battle" ||
+			this.state.battle.phase !== "player"
+		)
+			return false;
 		if (id === "wait") return this.wait();
 		if (id === "move" && unit.moved)
 			return this.notice("This unit has already moved.");
@@ -1737,7 +1748,7 @@ export class Game {
 	selectTile(x, z) {
 		const battle = this.state.battle;
 		const tile = this.getTile(x, z);
-		if (!battle || !tile) return false;
+		if (this.state.screen !== "battle" || !battle || !tile) return false;
 		battle.selection = { x, z };
 		const occupant = this.unitAt(x, z, true);
 		if (occupant) battle.selectedId = occupant.id;
@@ -2263,14 +2274,27 @@ export class Game {
 		}
 		const ability = this.adjustedAbility(unit, abilityId);
 		if (!ability) return null;
-		const valid = this.inRange(unit, ability, { x, z });
+		const inRange = this.inRange(unit, ability, { x, z });
 		const targets = this.affectedUnits(ability, { x, z }, unit).map((target) =>
 			this.predictEffect(unit, ability, target),
 		);
+		const action = this.getActions(unit).find(
+			(entry) => entry.id === abilityId,
+		);
+		const reason =
+			!action || action.disabled
+				? action?.reason || "This action is unavailable."
+				: !inRange
+					? "This tile is outside the action’s range."
+					: !targets.length
+						? "Choose a tile with a valid target."
+						: "";
+		const valid = !reason;
 		return {
 			ability,
 			valid,
-			label: valid ? ability.name : "Out of range",
+			reason,
+			label: valid ? ability.name : reason,
 			targets,
 			damage: targets[0]?.damage || 0,
 			hit: targets[0]?.hit ?? 100,
@@ -2305,8 +2329,7 @@ export class Game {
 		)
 			return false;
 		const affected = this.affectedUnits(ability, target, unit);
-		if (!affected.length && !["buff", "status"].includes(ability.kind))
-			return false;
+		if (!affected.length) return false;
 		if (ability.consumable) {
 			if (unit.team === "player" && !unit.guest) {
 				const id = this.consumableId(ability);
@@ -2938,6 +2961,14 @@ export class Game {
 		else target.pa = Math.max(2, target.pa - 3);
 	}
 	onDeath(unit) {
+		// Revival must not resume a charge or performance interrupted by death.
+		unit.casting = null;
+		unit.performing = null;
+		unit.airborne = false;
+		if (this.state.battle)
+			this.state.battle.casts = this.state.battle.casts.filter(
+				(cast) => cast.unitId !== unit.id,
+			);
 		if (unit.reviveOnce > 0) {
 			unit.reviveOnce--;
 			unit.hp = 1;
@@ -4055,8 +4086,9 @@ export class Game {
 		}
 	}
 	save() {
+		if (!this.state.party.length || !this.storage?.setItem) return false;
 		try {
-			this.storage?.setItem(SAVE_KEY, this.serialize());
+			this.storage.setItem(SAVE_KEY, this.serialize());
 			return true;
 		} catch {
 			return false;
@@ -4082,7 +4114,17 @@ export class Game {
 				!Number.isInteger(data.campaignIndex) ||
 				data.campaignIndex < 0 ||
 				data.campaignIndex > CAMPAIGN.length ||
-				!data.party.length
+				!data.party.length ||
+				!data.party.every(
+					(unit) =>
+						unit &&
+						typeof unit.id === "string" &&
+						jobsById.has(unit.job) &&
+						Number.isFinite(unit.level),
+				) ||
+				!data.inventory ||
+				typeof data.inventory !== "object" ||
+				Array.isArray(data.inventory)
 			)
 				return false;
 			const suspended = data.screen === "battle" && data.battle;
@@ -4103,7 +4145,10 @@ export class Game {
 					))
 			)
 				return false;
-			this.state = {
+			// Normalize and advance a separate instance so a rejected load cannot
+			// partially replace the current campaign or write over its saved data.
+			const restored = new Game({ seed: this.seed, storage: null });
+			restored.state = {
 				...this.initialState(),
 				...data,
 				battle: suspended ? data.battle : null,
@@ -4114,21 +4159,23 @@ export class Game {
 						? "ending"
 						: "world",
 			};
-			if (this.state.screen === "ending") this.state.endingSeen = true;
-			for (const unit of this.state.party) {
+			if (restored.state.screen === "ending") restored.state.endingSeen = true;
+			for (const unit of restored.state.party) {
 				unit.jp ||= {};
 				unit.jobExp ||= {};
 				unit.learned ||= [];
 				unit.equipment ||= {};
 				unit.statuses = {};
-				this.recalculate(unit);
+				restored.recalculate(unit);
 				unit.hp = unit.maxHp;
 				unit.mp = unit.maxMp;
 			}
 			if (suspended) {
-				this.state.battle.tiles = this.state.battle.map;
-				this.state.battle.encounter = encounterById.get(this.state.battle.id);
-				for (const unit of this.state.battle.units) {
+				restored.state.battle.tiles = restored.state.battle.map;
+				restored.state.battle.encounter = encounterById.get(
+					restored.state.battle.id,
+				);
+				for (const unit of restored.state.battle.units) {
 					unit.abilitySlots ||= {
 						reaction: null,
 						support: null,
@@ -4136,10 +4183,11 @@ export class Game {
 					};
 					unit.statuses ||= {};
 				}
-				if (!this.activeUnit || this.state.battle.phase === "clock")
-					this._advanceClockToTurn();
-				else this.refreshTacticalState();
+				if (!restored.activeUnit || restored.state.battle.phase === "clock")
+					restored._advanceClockToTurn();
+				else restored.refreshTacticalState();
 			}
+			this.state = restored.state;
 			this.emit("loaded");
 			return true;
 		} catch {

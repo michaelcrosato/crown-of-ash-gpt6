@@ -13,7 +13,13 @@ async function start() {
 		document.getElementById("scene"),
 	).init();
 	const audio = new GameAudio();
-	await audio.init();
+	let audioUnavailable = false;
+	try {
+		await audio.init();
+	} catch (error) {
+		audioUnavailable = true;
+		console.warn("Audio is unavailable:", error);
+	}
 	const game = new Game();
 	let previousScreen = "";
 	let aiTimer = null;
@@ -66,6 +72,10 @@ async function start() {
 		}
 	});
 	ui = setupUI(game, renderer, audio);
+	if (audioUnavailable)
+		ui.notify(
+			"Audio could not be loaded. You can still play; reload to retry sound.",
+		);
 	renderer.onTile = (x, z) => ui.selectTile(x, z);
 	renderer.onHover = (x, z) => ui.previewTile(x, z);
 	renderer.setMode("title");

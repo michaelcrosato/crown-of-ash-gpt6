@@ -100,7 +100,13 @@ test("WebGL2: title, controls, options, real tile input, jobs and local save res
 			p.project(renderer.camera);
 			const x = (p.x * 0.5 + 0.5) * innerWidth,
 				y = (-p.y * 0.5 + 0.5) * innerHeight;
-			if (document.elementFromPoint(x, y)?.id === "scene")
+			// Character meshes may cover nearby ground in the isometric view.
+			const picked = renderer.pick({ clientX: x, clientY: y });
+			if (
+				document.elementFromPoint(x, y)?.id === "scene" &&
+				picked?.x === tile.x &&
+				picked?.z === tile.z
+			)
 				return {
 					x,
 					y,
@@ -130,6 +136,15 @@ test("WebGL2: title, controls, options, real tile input, jobs and local save res
 	}));
 	await page.reload();
 	await page.waitForFunction(() => window.crown);
+	// Leaving an unloaded title must preserve the existing suspended campaign.
+	const savedAtTitle = await page.evaluate(() =>
+		localStorage.getItem("crown-zodiac-save-v1"),
+	);
+	await page.reload();
+	await page.waitForFunction(() => window.crown);
+	expect(
+		await page.evaluate(() => localStorage.getItem("crown-zodiac-save-v1")),
+	).toBe(savedAtTitle);
 	await page.locator('[data-action="continue"]').click();
 	const after = await page.evaluate(() => ({
 		index: crown.game.state.campaignIndex,
